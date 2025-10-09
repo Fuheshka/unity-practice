@@ -1,4 +1,8 @@
+using System.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+
+// ...existing code...
 
 /// <summary>
 /// Simple player movement
@@ -22,6 +26,7 @@ public class Player : MonoBehaviour {
     /// Cached Rigidbody component
     /// </summary>
     Rigidbody _body = null;
+    HealthComponent _health = null;
 
     /// <summary>
     /// Initialize
@@ -29,6 +34,13 @@ public class Player : MonoBehaviour {
     void Start() {
         _body = GetComponent<Rigidbody>();
         _body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        // subscribe to health events if HealthComponent is present
+        _health = GetComponent<HealthComponent>();
+        if (_health != null) {
+            _health.OnDied += HandleDeath;
+        } else {
+            Debug.LogWarning("Player has no HealthComponent. Add one to enable death/restart behavior.");
+        }
     }
 
     /// <summary>
@@ -51,5 +63,21 @@ public class Player : MonoBehaviour {
     /// </summary>
     void OnCollisionEnter(Collision collision) {
         Debug.Log($"Player collided with: {collision.gameObject.name}");
+    }
+
+    void HandleDeath() {
+        Debug.Log("Player died. Restarting level...");
+        StartCoroutine(ReloadAfterDelay(1f));
+    }
+
+    IEnumerator ReloadAfterDelay(float seconds) {
+        yield return new WaitForSeconds(seconds);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    void OnDestroy() {
+        if (_health != null) {
+            _health.OnDied -= HandleDeath;
+        }
     }
 }
