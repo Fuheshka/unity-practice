@@ -1,14 +1,21 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-
-// ...existing code...
 
 /// <summary>
 /// Simple player movement
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(Gun))]
 public class Player : MonoBehaviour {
+
+    /// <summary>
+    /// Wall object name
+    /// </summary>
+    const string WALL_OBJECT = "Wall";
+
+    /// <summary>
+    /// NPC object name
+    /// </summary>
+    const string NPC_OBJECT = "NPC";
 
     /// <summary>
     /// Movement speed (units/second)
@@ -23,24 +30,33 @@ public class Player : MonoBehaviour {
     float _rotationSpeed = 720f;
 
     /// <summary>
+    /// Contact score for NPCs
+    /// </summary>
+    [SerializeField]
+    int _contactScore = 10;
+
+    /// <summary>
+    /// Reference to the demo history
+    /// </summary>
+    [SerializeField]
+    DemoHistory _history = null;
+
+    /// <summary>
     /// Cached Rigidbody component
     /// </summary>
     Rigidbody _body = null;
-    HealthComponent _health = null;
+
+    /// <summary>
+    /// Gun component
+    /// </summary>
+    Gun _gun = null;
 
     /// <summary>
     /// Initialize
     /// </summary>
     void Start() {
         _body = GetComponent<Rigidbody>();
-        _body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-        // subscribe to health events if HealthComponent is present
-        _health = GetComponent<HealthComponent>();
-        if (_health != null) {
-            _health.OnDied += HandleDeath;
-        } else {
-            Debug.LogWarning("Player has no HealthComponent. Add one to enable death/restart behavior.");
-        }
+        _gun = GetComponent<Gun>();
     }
 
     /// <summary>
@@ -51,10 +67,22 @@ public class Player : MonoBehaviour {
         var vertical = Input.GetAxis("Vertical");
         var movement = new Vector3(horizontal, 0f, vertical).normalized;
         var velocity = movement * _speed;
-        _body.MovePosition(_body.position + velocity * Time.fixedDeltaTime);
-        if (movement != Vector3.zero) {
-            var targetRotation = Quaternion.LookRotation(movement);
-            _body.MoveRotation(Quaternion.RotateTowards(_body.rotation, targetRotation, _rotationSpeed * Time.fixedDeltaTime));
+        if (velocity != Vector3.zero) {
+            var cmd = new MoveCommand(_body, movement, velocity, _rotationSpeed);
+            _history.Add(cmd);
+            cmd.Execute();
+        }
+    }
+
+    /// <summary>
+    /// Using gun example and object pooling
+    /// </summary>
+    void Update() {
+        if (Input.GetKeyDown(KeyCode.Space)) {
+            _gun.Shoot();
+        }
+        if (Input.GetKeyDown(KeyCode.R)) {
+            _gun.Reload();
         }
     }
 
@@ -62,22 +90,13 @@ public class Player : MonoBehaviour {
     /// Raise when the player collides with another object
     /// </summary>
     void OnCollisionEnter(Collision collision) {
-        Debug.Log($"Player collided with: {collision.gameObject.name}");
-    }
-
-    void HandleDeath() {
-        Debug.Log("Player died. Restarting level...");
-        StartCoroutine(ReloadAfterDelay(1f));
-    }
-
-    IEnumerator ReloadAfterDelay(float seconds) {
-        yield return new WaitForSeconds(seconds);
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-
-    void OnDestroy() {
-        if (_health != null) {
-            _health.OnDied -= HandleDeath;
+        var item = collision.gameObject.name;
+        Debug.Log($"[{nameof(Player).ToUpperInvariant()}] collided with: {item}");
+        if (item.Equals(WALL_OBJECT)) {
+            EventBus.Publish<CustomEvents>(CustomEvents.WallDetected);
+        }
+        if (item.Equals(NPC_OBJECT)) {
+            Score.Add(_contactScore);
         }
     }
 }
